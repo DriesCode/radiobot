@@ -52,7 +52,8 @@ module.exports = {
                             "After **March 19th**, everything will **get back to normality** and all servers will recover their songs.\n\n" + 
                             "**Voting benefits are also disabled**, but **you won't lose your current votes**.\n\n" + 
                             "Some commands have been removed during this period of time. You can **check the available commands with " + core.discord.DISCORD_PREFIX + "help**\n\n" + 
-                            "You may also experience some **delay to start the song** (about a couple of seconds)"
+                            "If you can't hear Radiobot playing music, move the bot to another voice channel a couple of times or disconnect it from voice until the song plays.\n\n" + 
+                            "**Disaster-Plan Mode until March 19th.**"
             });
         });
     }

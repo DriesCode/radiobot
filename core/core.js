@@ -279,7 +279,11 @@ async function startLoopPlay(channel, refresh, songCommand) {
     setTimeout(async () => {
         try {
             let voiceConnection = await channel.join();
-            voiceConnection.voice.setDeaf(true);
+
+            setTimeout(() => {
+                if (voiceConnection && voiceConnection.voice)
+                    voiceConnection.voice.setDeaf(true);
+            }, 1500);
 
             if (channel.members.array().length <= 0 || (channel.members.array().length == 1 && channel.members.array()[0].id == CLIENT_ID)) return;
 

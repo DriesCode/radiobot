@@ -96,7 +96,7 @@ core.init(() => {
                                             if (newState.connection.status == 0) {
                                                 setTimeout(() => {
                                                     newState.setChannel(oldState.channelID);
-                                                }, 200);   
+                                                }, 200); 
                                                 clearInterval(_i);
                                                 _i = null;
                                             }
