@@ -56,5 +56,7 @@ module.exports = {
                             "**Disaster-Plan Mode until March 19th.**"
             });
         });
+
+        core.discord.sendWebhook("Showed help message in " + m.guild.name + " (" + m.guild.id + ")");
     }
 };
