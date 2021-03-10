@@ -1,6 +1,5 @@
 const logs = require('./core_logs.js');
 const discord = require('./core_discord.js');
-const mysql = require('./core_mysql.js');
 const config = require('./core_config.json');
 
 const ytdl = require('ytdl-core');
@@ -44,6 +43,9 @@ var userPacks = {};
 // serverid -> max songs
 var serverMaxSongs = {};
 
+//guild id -> channel
+var cacheServerChannels = {};
+
 var totalSongs = 0;
 
 var numbers = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
@@ -57,7 +59,7 @@ var CLIENT_ID = "";
 async function init(callback) {
     await logs.init();
     await discord.init();
-    await mysql.init();
+    // await mysql.init();
     callback();
 }
 
@@ -166,11 +168,11 @@ function getCurrentlyPlayingSongInServer(serverid) {
 }
 
 function getServerChannel(serverid) {
-    if (!serverChannels[serverid]) {
-        serverChannels[serverid] = "";
+    if (!cacheServerChannels[serverid]) {
+        return "";
     }
 
-    return serverChannels[serverid];
+    return cacheServerChannels[serverid].id;
 }
 
 function setServerChannel(serverid, channelid, saveToDb=false) {
@@ -227,23 +229,10 @@ function isServerDisconnected(serverid) {
 }
 
 function joinVoiceChannel(client, serverid, refresh=true, songCommand=false) {
-    if (serverChannels.hasOwnProperty(serverid)) {
-        client.guilds.fetch(serverid).then(async g => {
-            for (let c of g.channels.cache) {
-                if (c[0] == serverChannels[serverid]) {
-                    if (c[1].type == 'voice') {
-                        let idx = disconnectedServers.indexOf(serverid);
-                        if (idx > -1)
-                            disconnectedServers.splice(idx, 1);
-
-                        startLoopPlay(c[1], refresh, songCommand);
-                        break;
-                    }
-                }
-            }
-        }).catch(err => {
-            logs.log("ERROR! Fetching guild " + serverid + " at joinVoiceChannel " + err, "DISCORD", logs.LogFile.ERROR_LOG);
-        });
+    if (songCommand) {
+        startLoopPlay(client, refresh, songCommand);
+    } else {
+        startLoopPlay(cacheServerChannels[serverid], refresh, songCommand);
     }
 }
 
@@ -270,19 +259,9 @@ async function startLoopPlay(channel, refresh, songCommand) {
     let songUrl = "";
     let song = [];
 
-    if (getQueue(channel.guild.id) != -1 && getQueue(channel.guild.id) && !songCommand) {
-        if (getServerSongs(channel.guild.id).length > 0) {
-            let nextSongId = getNextSongId(channel.guild.id);
-            if (nextSongId > -1) {
-                let nextSong = getSongById(nextSongId);
-                setCurrentlyPlayingSongInServer(channel.guild.id, nextSong, true);
-            }
-        }
-    }
-
-    song = getCurrentlyPlayingSongInServer(channel.guild.id)
+    song = getCurrentlyPlayingSongInServer(channel.guild.id);
     songUrl = song[2];
-    if (typeof songUrl !== 'string' && getCurrentlyPlayingSongInServer(channel.guild.id).length > 0) {
+    if (typeof songUrl !== 'string' && song.length > 0) {
         logs.log("WARNING! Could not play song in channel (" + channel.guild.id + ") " + channel.id + ": Song URL is undefined.", "ERROR", logs.LogFile.ERROR_LOG);
         return;
     }
@@ -297,22 +276,16 @@ async function startLoopPlay(channel, refresh, songCommand) {
         }
     }
 
-    try {
-        if (!songLastPlayUpdateTimeout.hasOwnProperty(channel.guild.id) || (getUnixTimeNow() > songLastPlayUpdateTimeout[channel.guild.id])) {
-            updateLastPlayTime(channel.guild.id, getCurrentlyPlayingSongInServer(channel.guild.id)[0]);
-        }
-    } catch (e) {
-        logs.log("ERROR! Could not update last play time song of server " + channel.guild.id + " (" + JSON.stringify(getCurrentlyPlayingSongInServer(channel.guild.id)), "ERROR", logs.LogFile.ERROR_LOG);
-    }
-
     setTimeout(async () => {
         try {
             let voiceConnection = await channel.join();
+            voiceConnection.voice.setDeaf(true);
 
             if (channel.members.array().length <= 0 || (channel.members.array().length == 1 && channel.members.array()[0].id == CLIENT_ID)) return;
 
-            if (fs.existsSync(CACHE_PATH + getMD5(getVideoId(song[0])) + ".mp3")) {
-                let filename = getMD5(getVideoId(song[0]))+".mp3";
+            if (fs.existsSync(CACHE_PATH + getMD5(song[3]) + ".mp3")) {
+                let filename = getMD5(song[3])+".mp3";
+                logs.log("Reading from cache: " + song[3] + " | " + filename);
                 let voiceDispatcher = voiceConnection.play(fs.createReadStream(CACHE_PATH + filename));
                 //voiceDispatcher.setVolume(0.3);
 
@@ -324,7 +297,7 @@ async function startLoopPlay(channel, refresh, songCommand) {
                     startLoopPlay(channel, false);
                 });
             } else {
-                let hash_id = getMD5(getVideoId(song[0]));
+                let hash_id = getMD5(song[3]);
                 
                 logs.log('Trying to download through API ' + songUrl, "SONG", logs.LogFile.DOWNLOAD_LOG);
                 let pipe_proc = request(API_WRAPPER_URL + "audio?u=" + encodeURIComponent(songUrl)).pipe(fs.createWriteStream(CACHE_PATH + hash_id + ".mp3"));
@@ -347,6 +320,28 @@ async function startLoopPlay(channel, refresh, songCommand) {
         } catch (e) {
             logs.log("WARNING! Could not connect to voice channel: (" + channel.guild.id + ") " + e, "ERROR", logs.LogFile.ERROR_LOG);
         }
+        // try {
+        //     let voiceConnection = await channel.join();
+
+        //     if (channel.members.array().length <= 0 || (channel.members.array().length == 1 && channel.members.array()[0].id == CLIENT_ID)) return;
+
+        //     logs.log('Trying to get through API ' + songUrl, "PLAY-FINAL-URL", logs.LogFile.DOWNLOAD_LOG);
+        //     request(API_WRAPPER_URL + "validate?u=" + encodeURIComponent(songUrl), (err, resp, body) => {
+        //         if (resp.statusCode === 200) {
+        //             let voiceDispatcher = voiceConnection.play(API_WRAPPER_URL + "audio?u=" + encodeURIComponent(songUrl));
+
+        //             serverVoiceDispatcher[channel.guild.id] = voiceDispatcher;
+        //             serverVoiceConnection[channel.guild.id] = voiceConnection;
+
+        //             voiceDispatcher.once('finish', () => {
+        //                 voiceDispatcher.destroy();
+        //                 startLoopPlay(channel, false);
+        //             });
+        //         }
+        //     });
+        // } catch (e) {
+        //     logs.log("WARNING! Could not connect to voice channel: (" + channel.guild.id + ") " + e, "ERROR", logs.LogFile.ERROR_LOG);
+        // }
     }, 500);
 }
 
@@ -734,7 +729,7 @@ function setClientId(_CLIENT_ID) {
 module.exports = {
     logs: logs,
     discord: discord,
-    mysql: mysql,
+    // mysql: mysql,
     config: config,
 
     ytdl: ytdl,
@@ -795,6 +790,7 @@ module.exports = {
     stopPlayingCurrentSong: stopPlayingCurrentSong,
 
     totalSongs: totalSongs,
+    cacheServerChannels: cacheServerChannels,
 
     numbers: numbers,
     MAX_SERVER_SONGS: MAX_SERVER_SONGS,

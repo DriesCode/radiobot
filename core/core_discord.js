@@ -16,8 +16,9 @@ const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('
 
 const NotifyType = {
     Error: "#ff0000",
-    Info: "#fc9c1e",
-    Success: "#43b800"
+    Info: "#9514b3",
+    Success: "#9514b3",
+    Special: "#9514b3"
 };
 
 function getCommandFiles() {

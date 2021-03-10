@@ -9,6 +9,7 @@ lerna-debug.log*
 package-lock.json
 core_config.json
 cache/
+cache_old/
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
